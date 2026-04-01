@@ -204,7 +204,7 @@ with tab1:
                        tickfont=dict(color="#8b949e")),
             yaxis2=dict(overlaying="y", side="right", range=[0,110],
                         gridcolor="#30363d", tickfont=dict(color="#8b949e"),
-                        title="Cumulative %", titlefont=dict(color="#8b949e")),
+                        title=dict(text="Cumulative %", font=dict(color="#8b949e"))),
             legend=dict(orientation="h", y=1.05, font=dict(color="#e8e8e8")),
         ))
         fig.add_bar(x=fm_counts["Failure Mode"], y=fm_counts["Count"],
