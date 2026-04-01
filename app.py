@@ -201,7 +201,8 @@ with tab1:
         fig.add_hline(y=80, line_dash="dash", line_color="#d29922",
                       yref="y2", annotation_text="80% threshold",
                       annotation_font_color="#d29922")
-        fig.update_layout(**DARK, height=380,
+        fig.update_layout(**DARK)
+        fig.update_layout(height=380,
                           yaxis2=dict(overlaying="y", side="right",
                                       range=[0,110], gridcolor="#30363d",
                                       tickfont=dict(color="#8b949e"), title="Cumulative %",
@@ -223,7 +224,8 @@ with tab1:
         fig2.add_hline(y=80, line_dash="dash", line_color="#d29922",
                        yref="y2", annotation_text="80% threshold",
                        annotation_font_color="#d29922")
-        fig2.update_layout(**DARK, height=380,
+        fig2.update_layout(**DARK)
+        fig2.update_layout(height=380,
                            yaxis2=dict(overlaying="y", side="right",
                                        range=[0,110], gridcolor="#30363d",
                                        tickfont=dict(color="#8b949e")),
