@@ -7,15 +7,13 @@ from scipy import stats
 from datetime import datetime, timedelta
 import random
 
-st.set_page_config(
-    page_title="FailureIQ | Hardware RCA Engine",
-    page_icon="🔬", layout="wide"
-)
+st.set_page_config(page_title="FailureIQ | Hardware RCA Engine",
+                   page_icon="🔬", layout="wide")
 
 st.markdown("""
 <style>
-  html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],[data-testid="block-container"]{
-    background-color:#0f1117!important;color:#e8e8e8!important}
+  html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],
+  [data-testid="block-container"]{background-color:#0f1117!important;color:#e8e8e8!important}
   [data-testid="stSidebar"]{background-color:#161b22!important}
   [data-testid="stSidebar"] *{color:#e8e8e8!important}
   h1,h2,h3,h4,p,span,div,label,.stMarkdown{color:#e8e8e8!important}
@@ -49,10 +47,26 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-DARK = dict(template="plotly_dark", paper_bgcolor="#0f1117", plot_bgcolor="#161b22",
-            font=dict(color="#e8e8e8"), margin=dict(t=30,b=40,l=10,r=10))
+# ── DARK LAYOUT HELPER ────────────────────────────────────────────────────────
+def dark_layout(fig, height=380, xangle=0, legend=True):
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#0f1117",
+        plot_bgcolor="#161b22",
+        font=dict(color="#e8e8e8"),
+        height=height,
+        margin=dict(t=30, b=50, l=10, r=10),
+    )
+    fig.update_xaxes(gridcolor="#30363d", linecolor="#30363d",
+                     tickfont=dict(color="#8b949e"), tickangle=xangle)
+    fig.update_yaxes(gridcolor="#30363d", linecolor="#30363d",
+                     tickfont=dict(color="#8b949e"))
+    if legend:
+        fig.update_layout(legend=dict(orientation="h", y=1.05,
+                                      font=dict(color="#e8e8e8")))
+    return fig
 
-# ── SYNTHETIC DATA ────────────────────────────────────────────────────────────
+# ── DATA ──────────────────────────────────────────────────────────────────────
 @st.cache_data
 def generate_data(n=1200, seed=42):
     random.seed(seed); np.random.seed(seed)
@@ -65,9 +79,8 @@ def generate_data(n=1200, seed=42):
     modes      = ["Thermal Overstress","ESD Damage","Mechanical Fatigue",
                   "Firmware Corruption","Solder Joint Failure","Capacitor Degradation",
                   "Connector Wear","Moisture Ingress"]
-    severities = ["Critical","Major","Minor"]
     rows = []
-    base = datetime(2024,1,1)
+    base = datetime(2024, 1, 1)
     for i in range(n):
         v = random.choices(vendors, weights=[0.22,0.21,0.12,0.11,0.1,0.1,0.07,0.07])[0]
         z = random.choices(zones,
@@ -78,7 +91,7 @@ def generate_data(n=1200, seed=42):
               weights=[0.28,0.05,0.12,0.15,0.18,0.1,0.07,0.05]
               if "Thermal" in z else [0.08,0.18,0.15,0.12,0.15,0.12,0.1,0.1])[0]
         age = int(np.random.exponential(180) + 30)
-        sev = random.choices(severities,
+        sev = random.choices(["Critical","Major","Minor"],
               weights=[0.45,0.35,0.2] if v in ["VendorA","VendorB"] and "Thermal" in z
               else [0.15,0.35,0.5])[0]
         batch = f"B{2024 + i//400}-{random.randint(1,12):02d}"
@@ -93,20 +106,24 @@ df = generate_data()
 
 def mtbf(ages): return round(float(np.mean(ages)), 1) if len(ages) else 0
 
-def chi2_cluster(col):
-    counts  = df[col].value_counts()
-    exp     = np.full(len(counts), len(df)/len(counts))
+def chi2_cluster(data, col):
+    counts = data[col].value_counts()
+    exp = np.full(len(counts), len(data) / len(counts))
     chi2, p = stats.chisquare(counts.values, f_exp=exp)
-    return round(chi2,2), round(p,4)
+    return round(chi2, 2), round(p, 4)
 
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### Filters")
-    sel_vendors  = st.multiselect("Vendor",       df["Vendor"].unique().tolist(),       default=df["Vendor"].unique().tolist())
-    sel_zones    = st.multiselect("Thermal zone", df["Thermal Zone"].unique().tolist(), default=df["Thermal Zone"].unique().tolist())
-    sel_sev      = st.multiselect("Severity",     ["Critical","Major","Minor"],          default=["Critical","Major","Minor"])
-    sel_comp     = st.multiselect("Component",    df["Component"].unique().tolist(),     default=df["Component"].unique().tolist())
-    age_range    = st.slider("Age at failure (days)", 0, 600, (0, 600))
+    sel_vendors = st.multiselect("Vendor", df["Vendor"].unique().tolist(),
+                                 default=df["Vendor"].unique().tolist())
+    sel_zones   = st.multiselect("Thermal zone", df["Thermal Zone"].unique().tolist(),
+                                 default=df["Thermal Zone"].unique().tolist())
+    sel_sev     = st.multiselect("Severity", ["Critical","Major","Minor"],
+                                 default=["Critical","Major","Minor"])
+    sel_comp    = st.multiselect("Component", df["Component"].unique().tolist(),
+                                 default=df["Component"].unique().tolist())
+    age_range   = st.slider("Age at failure (days)", 0, 600, (0, 600))
 
 filt = df[
     df["Vendor"].isin(sel_vendors) &
@@ -116,180 +133,159 @@ filt = df[
     df["Age at Failure (days)"].between(*age_range)
 ].copy()
 
+# ── CELL STYLERS ──────────────────────────────────────────────────────────────
+SEV_STYLE = {"Critical": "background-color:#3d1f1f;color:#f85149;font-weight:600",
+             "Major":    "background-color:#3d2f0f;color:#d29922;font-weight:600",
+             "Minor":    "background-color:#0f2d1f;color:#3fb950;font-weight:600"}
+
+def sty_sev(v): return SEV_STYLE.get(v, "")
+
+COLOR_MAP = {"Critical": "#f85149", "At Risk": "#d29922", "Stable": "#3fb950"}
+
 # ── HEADER ────────────────────────────────────────────────────────────────────
-st.markdown("<h2 style='color:#e8e8e8;margin-bottom:2px'>FailureIQ — Hardware Root Cause Analysis Engine</h2>", unsafe_allow_html=True)
-st.markdown("<p style='color:#8b949e;font-size:13px'>Automated failure pattern detection, root cause identification, and CAPA tracking for data center hardware quality engineering</p>", unsafe_allow_html=True)
+st.markdown("<h2 style='color:#e8e8e8;margin-bottom:2px'>"
+            "FailureIQ — Hardware Root Cause Analysis Engine</h2>",
+            unsafe_allow_html=True)
+st.markdown("<p style='color:#8b949e;font-size:13px'>"
+            "Automated failure pattern detection, root cause identification, "
+            "and CAPA tracking for data center hardware quality engineering</p>",
+            unsafe_allow_html=True)
 
 with st.expander("Preview demo data", expanded=False):
-    st.markdown("<p style='color:#8b949e;font-size:13px'>Sample of the 1,200 hardware failure records powering this dashboard</p>", unsafe_allow_html=True)
-    sample = generate_data().sample(10, random_state=1)[
-        ["ID","Timestamp","Vendor","Thermal Zone","Component","Failure Mode","Age at Failure (days)","Severity","Batch","Resolved"]
+    st.markdown("<p style='color:#8b949e;font-size:13px'>"
+                "Sample of the 1,200 hardware failure records</p>",
+                unsafe_allow_html=True)
+    sample = df.sample(10, random_state=1)[
+        ["ID","Timestamp","Vendor","Thermal Zone","Component",
+         "Failure Mode","Age at Failure (days)","Severity","Batch","Resolved"]
     ].reset_index(drop=True)
-    def sty_sev_prev(v):
-        return ({"Critical":"background-color:#3d1f1f;color:#f85149;font-weight:600",
-                 "Major":   "background-color:#3d2f0f;color:#d29922;font-weight:600",
-                 "Minor":   "background-color:#0f2d1f;color:#3fb950;font-weight:600"}).get(v,"")
-    st.dataframe(sample.style.map(sty_sev_prev, subset=["Severity"]),
+    st.dataframe(sample.style.map(sty_sev, subset=["Severity"]),
                  use_container_width=True, hide_index=True)
-    st.markdown("<p style='color:#8b949e;font-size:12px'>Full dataset: 1,200 records across 8 vendors, 6 thermal zones, 8 components, 8 failure modes. See Data preview tab for filtered exploration.</p>", unsafe_allow_html=True)
 
 with st.expander("What does this app do?", expanded=False):
     st.markdown("""
 **FailureIQ** replicates the root cause analysis workflow a data center quality engineer
-performs when investigating hardware reliability data — automated in a single tool instead
-of a manual spreadsheet process.
+performs when investigating hardware reliability data.
 
-**The problem it solves**
+**How it works:** Pareto analysis identifies failure modes driving 80% of events.
+Chi-square cluster detection tests whether failures are statistically non-random.
+MTBF calculation quantifies mean time between failures per component and vendor.
+Fishbone diagram generation maps contributing factors across 5M+E categories.
 
-Data centers process thousands of hardware failure events across servers, storage, and
-network components. Identifying whether failures concentrate by vendor batch, thermal zone,
-component age, or failure mode requires statistical pattern detection — the kind a quality
-engineer performs using Pareto analysis, chi-square tests, and MTBF calculations.
-Done manually, this takes days. FailureIQ does it in seconds.
-
-**How it works**
-
-The analysis pipeline runs four techniques simultaneously: Pareto analysis identifies the
-vital few failure modes driving 80% of events. Chi-square cluster detection tests whether
-failures are statistically non-random across vendors and zones. MTBF calculation quantifies
-mean time between failures per component and vendor. Fishbone diagram generation maps
-contributing factors across the standard 5M+E categories (Materials, Methods, Machine,
-Man, Measurement, Environment) with significance-weighted branches.
-
-**CAPA workflow**
-
-Each identified root cause links to a corrective and preventive action record with owner,
-target date, and verification metric — structured output that mirrors hardware quality
-engineering documentation standards.
+**CAPA workflow:** Each identified root cause links to a corrective action record
+with owner, target date, and verification metric.
     """)
 
-# ── METRICS ──────────────────────────────────────────────────────────────────
+# ── METRICS ───────────────────────────────────────────────────────────────────
 c1,c2,c3,c4,c5 = st.columns(5)
-crit_n  = int((filt["Severity"]=="Critical").sum())
-top_v   = filt["Vendor"].value_counts().index[0] if len(filt) else "N/A"
-top_vm  = filt[filt["Vendor"]==top_v]["Failure Mode"].value_counts().index[0] if len(filt) else "N/A"
-unres   = int((~filt["Resolved"]).sum())
-avg_age = mtbf(filt["Age at Failure (days)"])
-
-c1.metric("Total failures",     len(filt))
-c2.metric("Critical failures",  crit_n)
-c3.metric("Unresolved",         unres)
-c4.metric("Avg MTBF (days)",    avg_age)
+top_v = filt["Vendor"].value_counts().index[0] if len(filt) else "N/A"
+c1.metric("Total failures",    len(filt))
+c2.metric("Critical",          int((filt["Severity"]=="Critical").sum()))
+c3.metric("Unresolved",        int((~filt["Resolved"]).sum()))
+c4.metric("Avg MTBF (days)",   mtbf(filt["Age at Failure (days)"]))
 c5.metric("Top failure vendor", top_v)
 st.markdown("---")
 
 tab1,tab2,tab3,tab4,tab5 = st.tabs([
-    "Pareto analysis","Cluster detection","MTBF breakdown","Fishbone + CAPA","Data preview"
+    "Pareto analysis","Cluster detection",
+    "MTBF breakdown","Fishbone + CAPA","Data preview"
 ])
 
 # ── TAB 1: PARETO ─────────────────────────────────────────────────────────────
 with tab1:
-    st.markdown("<h4 style='color:#e8e8e8'>Pareto analysis — top failure modes</h4>", unsafe_allow_html=True)
-    st.markdown("<p style='color:#8b949e;font-size:13px'>Identifies the vital few failure modes driving 80% of all events (80/20 principle)</p>", unsafe_allow_html=True)
+    st.markdown("<h4 style='color:#e8e8e8'>Pareto analysis — failure modes</h4>",
+                unsafe_allow_html=True)
 
-    c1,c2 = st.columns(2)
+    c1, c2 = st.columns(2)
+
     with c1:
-        fm_counts = filt["Failure Mode"].value_counts().reset_index()
-        fm_counts.columns = ["Failure Mode","Count"]
-        fm_counts["Cumulative %"] = (fm_counts["Count"].cumsum() / fm_counts["Count"].sum() * 100).round(1)
-        fm_counts["Label"] = fm_counts["Cumulative %"].astype(str) + "%"
-
-        fig = go.Figure()
-        fig.add_bar(x=fm_counts["Failure Mode"], y=fm_counts["Count"],
-                    marker_color="#58a6ff",
-                    text=fm_counts["Label"], textposition="outside",
-                    textfont=dict(color="#8b949e", size=11))
-        fig.update_layout(**DARK, height=380,
-                          xaxis=dict(tickangle=30, gridcolor="#30363d",
-                                     tickfont=dict(color="#8b949e")),
-                          yaxis=dict(gridcolor="#30363d", tickfont=dict(color="#8b949e")),
-                          showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
+        fm = filt["Failure Mode"].value_counts().reset_index()
+        fm.columns = ["Failure Mode","Count"]
+        fm["Cum%"] = (fm["Count"].cumsum() / fm["Count"].sum() * 100).round(1)
+        fm["Label"] = fm["Cum%"].astype(str) + "%"
+        fig1 = go.Figure()
+        fig1.add_bar(x=fm["Failure Mode"], y=fm["Count"],
+                     marker_color="#58a6ff",
+                     text=fm["Label"], textposition="outside",
+                     textfont=dict(color="#8b949e", size=10))
+        dark_layout(fig1, height=380, xangle=30, legend=False)
+        st.plotly_chart(fig1, use_container_width=True)
 
     with c2:
-        vnd_counts = filt["Vendor"].value_counts().reset_index()
-        vnd_counts.columns = ["Vendor","Count"]
-        vnd_counts["Cumulative %"] = (vnd_counts["Count"].cumsum() / vnd_counts["Count"].sum() * 100).round(1)
-        vnd_counts["Label"] = vnd_counts["Cumulative %"].astype(str) + "%"
-
+        vnd = filt["Vendor"].value_counts().reset_index()
+        vnd.columns = ["Vendor","Count"]
+        vnd["Cum%"] = (vnd["Count"].cumsum() / vnd["Count"].sum() * 100).round(1)
+        vnd["Label"] = vnd["Cum%"].astype(str) + "%"
         fig2 = go.Figure()
-        fig2.add_bar(x=vnd_counts["Vendor"], y=vnd_counts["Count"],
+        fig2.add_bar(x=vnd["Vendor"], y=vnd["Count"],
                      marker_color="#3fb950",
-                     text=vnd_counts["Label"], textposition="outside",
-                     textfont=dict(color="#8b949e", size=11))
-        fig2.update_layout(**DARK, height=380,
-                           xaxis=dict(gridcolor="#30363d", tickfont=dict(color="#8b949e")),
-                           yaxis=dict(gridcolor="#30363d", tickfont=dict(color="#8b949e")),
-                           showlegend=False)
+                     text=vnd["Label"], textposition="outside",
+                     textfont=dict(color="#8b949e", size=10))
+        dark_layout(fig2, height=380, legend=False)
         st.plotly_chart(fig2, use_container_width=True)
 
-    st.markdown("<h4 style='color:#e8e8e8'>Failure heatmap — vendor vs. failure mode</h4>", unsafe_allow_html=True)
+    st.markdown("<h4 style='color:#e8e8e8'>Failure heatmap — vendor vs. mode</h4>",
+                unsafe_allow_html=True)
     heat = filt.groupby(["Vendor","Failure Mode"]).size().reset_index(name="Count")
     fig3 = px.density_heatmap(heat, x="Vendor", y="Failure Mode", z="Count",
                                color_continuous_scale=["#161b22","#1D6FA4","#f85149"])
-    fig3.update_layout(**DARK, height=350)
+    dark_layout(fig3, height=340, legend=False)
     st.plotly_chart(fig3, use_container_width=True)
 
 # ── TAB 2: CHI-SQUARE ─────────────────────────────────────────────────────────
 with tab2:
-    st.markdown("<h4 style='color:#e8e8e8'>Statistical cluster detection — chi-square test</h4>", unsafe_allow_html=True)
-    st.markdown("<p style='color:#8b949e;font-size:13px'>Tests whether failures are statistically non-random across vendors, zones, and components. p less than 0.05 means clustering is significant.</p>", unsafe_allow_html=True)
+    st.markdown("<h4 style='color:#e8e8e8'>Statistical cluster detection</h4>",
+                unsafe_allow_html=True)
 
     results = []
     for col in ["Vendor","Thermal Zone","Component","Failure Mode"]:
-        chi2, p = chi2_cluster(col)
+        chi2, p = chi2_cluster(filt, col)
         results.append({"Dimension": col, "Chi-square": chi2, "p-value": p,
-                        "Significant": "Yes" if p < 0.05 else "No",
-                        "Finding": "Failures cluster non-randomly" if p < 0.05
-                                   else "Failures distributed randomly"})
+                         "Significant": "Yes" if p < 0.05 else "No",
+                         "Finding": "Failures cluster non-randomly" if p < 0.05
+                                    else "Failures distributed randomly"})
     chi_df = pd.DataFrame(results)
 
-    def style_sig(v):
+    def sty_sig(v):
         return ("background-color:#3d1f1f;color:#f85149;font-weight:600" if v=="Yes"
                 else "background-color:#0f2d1f;color:#3fb950;font-weight:600")
 
-    st.dataframe(chi_df.style.map(style_sig, subset=["Significant"]),
+    st.dataframe(chi_df.style.map(sty_sig, subset=["Significant"]),
                  use_container_width=True, hide_index=True)
 
-    st.markdown("<h4 style='color:#e8e8e8'>Failure distribution by thermal zone and severity</h4>", unsafe_allow_html=True)
-    zone_sev = filt.groupby(["Thermal Zone","Severity"]).size().reset_index(name="Count")
-    fig4 = px.bar(zone_sev, x="Thermal Zone", y="Count", color="Severity",
-                  color_discrete_map={"Critical":"#f85149","Major":"#d29922","Minor":"#3fb950"},
-                  barmode="stack")
-    fig4.update_layout(**DARK, height=360,
-                       legend=dict(orientation="h",y=1.05,font=dict(color="#e8e8e8")),
-                       xaxis=dict(tickangle=20))
+    fig4 = px.bar(
+        filt.groupby(["Thermal Zone","Severity"]).size().reset_index(name="Count"),
+        x="Thermal Zone", y="Count", color="Severity", barmode="stack",
+        color_discrete_map={"Critical":"#f85149","Major":"#d29922","Minor":"#3fb950"}
+    )
+    dark_layout(fig4, height=360, xangle=20)
     st.plotly_chart(fig4, use_container_width=True)
 
-    st.markdown("<h4 style='color:#e8e8e8'>Age at failure distribution by vendor</h4>", unsafe_allow_html=True)
     fig5 = px.box(filt, x="Vendor", y="Age at Failure (days)", color="Severity",
                   color_discrete_map={"Critical":"#f85149","Major":"#d29922","Minor":"#3fb950"},
                   points="outliers")
-    fig5.update_layout(**DARK, height=360,
-                       legend=dict(orientation="h",y=1.05,font=dict(color="#e8e8e8")))
+    dark_layout(fig5, height=360)
     st.plotly_chart(fig5, use_container_width=True)
 
 # ── TAB 3: MTBF ───────────────────────────────────────────────────────────────
 with tab3:
-    st.markdown("<h4 style='color:#e8e8e8'>Mean Time Between Failures (MTBF) analysis</h4>", unsafe_allow_html=True)
-
-    mtbf_comp = filt.groupby("Component")["Age at Failure (days)"].agg(
+    st.markdown("<h4 style='color:#e8e8e8'>MTBF by component</h4>",
+                unsafe_allow_html=True)
+    mtbf_c = filt.groupby("Component")["Age at Failure (days)"].agg(
         MTBF="mean", Count="count", Std="std").round(1).reset_index()
-    mtbf_comp["MTBF"] = mtbf_comp["MTBF"].round(1)
-    mtbf_comp = mtbf_comp.sort_values("MTBF")
+    mtbf_c = mtbf_c.sort_values("MTBF")
 
     fig6 = go.Figure()
-    fig6.add_bar(y=mtbf_comp["Component"], x=mtbf_comp["MTBF"],
-                 orientation="h", marker_color="#58a6ff",
-                 error_x=dict(type="data", array=mtbf_comp["Std"], color="#8b949e"))
+    fig6.add_bar(y=mtbf_c["Component"], x=mtbf_c["MTBF"], orientation="h",
+                 marker_color="#58a6ff",
+                 error_x=dict(type="data", array=mtbf_c["Std"].fillna(0), color="#8b949e"))
     fig6.add_vline(x=180, line_dash="dash", line_color="#d29922",
-                   annotation_text="Target MTBF (180 days)",
-                   annotation_font_color="#d29922")
-    fig6.update_layout(**DARK, height=400)
+                   annotation_text="Target 180 days", annotation_font_color="#d29922")
+    dark_layout(fig6, height=400, legend=False)
     st.plotly_chart(fig6, use_container_width=True)
 
     st.markdown("<h4 style='color:#e8e8e8'>MTBF by vendor</h4>", unsafe_allow_html=True)
-    mtbf_vnd = filt.groupby("Vendor")["Age at Failure (days)"].agg(
+    mtbf_v = filt.groupby("Vendor")["Age at Failure (days)"].agg(
         MTBF="mean", Count="count").round(1).reset_index().sort_values("MTBF")
 
     def mtbf_color(v):
@@ -297,54 +293,47 @@ with tab3:
         if v < 180: return "background-color:#3d2f0f;color:#d29922;font-weight:600"
         return "background-color:#0f2d1f;color:#3fb950;font-weight:600"
 
-    st.dataframe(mtbf_vnd.style.map(mtbf_color, subset=["MTBF"]),
+    st.dataframe(mtbf_v.style.map(mtbf_color, subset=["MTBF"]),
                  use_container_width=True, hide_index=True)
 
-    st.markdown("<h4 style='color:#e8e8e8'>Failure trend over time</h4>", unsafe_allow_html=True)
     trend = filt.copy()
     trend["Month"] = trend["Timestamp"].dt.to_period("M").astype(str)
     trend_m = trend.groupby(["Month","Severity"]).size().reset_index(name="Count")
-    fig7 = px.line(trend_m, x="Month", y="Count", color="Severity",
-                   color_discrete_map={"Critical":"#f85149","Major":"#d29922","Minor":"#3fb950"},
-                   markers=True)
-    fig7.update_layout(**DARK, height=340,
-                       legend=dict(orientation="h",y=1.05,font=dict(color="#e8e8e8")),
-                       xaxis=dict(tickangle=30))
+    fig7 = px.line(trend_m, x="Month", y="Count", color="Severity", markers=True,
+                   color_discrete_map={"Critical":"#f85149","Major":"#d29922","Minor":"#3fb950"})
+    dark_layout(fig7, height=320, xangle=30)
     st.plotly_chart(fig7, use_container_width=True)
 
 # ── TAB 4: FISHBONE + CAPA ────────────────────────────────────────────────────
 with tab4:
-    st.markdown("<h4 style='color:#e8e8e8'>Fishbone diagram + CAPA generator</h4>", unsafe_allow_html=True)
-    st.markdown("<p style='color:#8b949e;font-size:13px'>Select a failure mode to generate structured root cause mapping and corrective action record</p>", unsafe_allow_html=True)
-
-    sel_mode = st.selectbox("Select failure mode", filt["Failure Mode"].value_counts().index.tolist())
+    st.markdown("<h4 style='color:#e8e8e8'>Fishbone + CAPA generator</h4>",
+                unsafe_allow_html=True)
+    sel_mode = st.selectbox("Select failure mode",
+                            filt["Failure Mode"].value_counts().index.tolist())
     sub = filt[filt["Failure Mode"] == sel_mode]
+
+    top_v_sub = sub["Vendor"].value_counts().index[0] if len(sub) else "N/A"
+    top_z_sub = sub["Thermal Zone"].value_counts().index[0] if len(sub) else "N/A"
+    top_c_sub = sub["Component"].value_counts().index[0] if len(sub) else "N/A"
 
     fishbone = {
         "Materials": [
-            f"Vendor concentration: {sub['Vendor'].value_counts().index[0]} accounts for "
-            f"{sub['Vendor'].value_counts().iloc[0]/len(sub)*100:.0f}% of this mode",
-            f"Avg component age at failure: {mtbf(sub['Age at Failure (days)'])} days",
-            f"Top batch affected: {sub['Batch'].value_counts().index[0]}"
+            f"Top vendor: {top_v_sub} — "
+            f"{sub['Vendor'].value_counts().iloc[0]/max(len(sub),1)*100:.0f}% of this mode",
+            f"Avg age at failure: {mtbf(sub['Age at Failure (days)'])} days",
         ],
         "Environment": [
-            f"Primary zone: {sub['Thermal Zone'].value_counts().index[0]} "
-            f"({sub['Thermal Zone'].value_counts().iloc[0]/len(sub)*100:.0f}% of events)",
-            "Thermal zone correlation with failure rate: statistically significant (p < 0.05)"
-            if chi2_cluster("Thermal Zone")[1] < 0.05 else "No significant zone correlation detected"
+            f"Primary zone: {top_z_sub} — "
+            f"{sub['Thermal Zone'].value_counts().iloc[0]/max(len(sub),1)*100:.0f}% of events",
         ],
         "Machine": [
-            f"Most affected component: {sub['Component'].value_counts().index[0]}",
-            f"Component accounts for {sub['Component'].value_counts().iloc[0]/len(sub)*100:.0f}% of this failure mode"
+            f"Most affected component: {top_c_sub}",
         ],
         "Methods": [
-            f"Resolution rate: {sub['Resolved'].mean()*100:.0f}% of cases resolved",
-            "CAPA closure rate suggests process gap in corrective action follow-through"
-            if sub['Resolved'].mean() < 0.7 else "CAPA closure rate within acceptable range"
+            f"Resolution rate: {sub['Resolved'].mean()*100:.0f}%",
         ],
         "Measurement": [
-            "Failure detection lag: review whether monitoring thresholds are calibrated to current thermal conditions",
-            f"Severity distribution: {(sub['Severity']=='Critical').mean()*100:.0f}% critical events"
+            f"Critical severity rate: {(sub['Severity']=='Critical').mean()*100:.0f}%",
         ],
     }
 
@@ -353,46 +342,45 @@ with tab4:
             f"<div style='background:#161b22;border-left:3px solid #58a6ff;"
             f"padding:10px 14px;border-radius:0 8px 8px 0;margin-bottom:8px'>"
             f"<b style='color:#58a6ff'>{cat}</b><br>"
-            + "".join([f"<span style='color:#e8e8e8;font-size:13px'>- {i}</span><br>" for i in items])
-            + "</div>", unsafe_allow_html=True
-        )
+            + "".join([f"<span style='color:#e8e8e8;font-size:13px'>- {i}</span><br>"
+                       for i in items])
+            + "</div>", unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown("<h4 style='color:#e8e8e8'>CAPA record</h4>", unsafe_allow_html=True)
-    capa = pd.DataFrame([
-        {"ID": f"CAPA-{sel_mode[:4].upper()}-001",
-         "Root Cause": f"Vendor batch concentration and thermal zone correlation for {sel_mode}",
-         "Corrective Action": f"Issue SCAR to {sub['Vendor'].value_counts().index[0]}; require batch traceability audit",
-         "Preventive Action": "Update incoming inspection protocol; add thermal zone monitoring threshold",
-         "Owner": "Quality Engineering",
-         "Target Date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
-         "Verification Metric": f"Reduce {sel_mode} rate by 40% within 60 days",
-         "Status": "Open"}
-    ])
+    capa = pd.DataFrame([{
+        "ID": f"CAPA-{sel_mode[:4].upper()}-001",
+        "Root Cause": f"Vendor batch concentration for {sel_mode}",
+        "Corrective Action": f"Issue SCAR to {top_v_sub}; require batch traceability audit",
+        "Preventive Action": "Update incoming inspection; add thermal zone monitoring",
+        "Owner": "Quality Engineering",
+        "Target Date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
+        "Verification Metric": f"Reduce {sel_mode} rate by 40% within 60 days",
+        "Status": "Open"
+    }])
     st.dataframe(capa, use_container_width=True, hide_index=True)
 
 # ── TAB 5: DATA PREVIEW ───────────────────────────────────────────────────────
 with tab5:
     st.markdown("<h4 style='color:#e8e8e8'>Raw failure log</h4>", unsafe_allow_html=True)
     c1,c2,c3 = st.columns(3)
-    pf_v = c1.selectbox("Vendor",   ["All"]+sorted(df["Vendor"].unique().tolist()), key="pv")
-    pf_z = c2.selectbox("Zone",     ["All"]+sorted(df["Thermal Zone"].unique().tolist()), key="pz")
-    pf_s = c3.selectbox("Severity", ["All","Critical","Major","Minor"], key="ps")
+    pv = c1.selectbox("Vendor",   ["All"]+sorted(df["Vendor"].unique()), key="pv")
+    pz = c2.selectbox("Zone",     ["All"]+sorted(df["Thermal Zone"].unique()), key="pz")
+    ps = c3.selectbox("Severity", ["All","Critical","Major","Minor"], key="ps")
+
     prev = df.copy()
-    if pf_v!="All": prev=prev[prev["Vendor"]==pf_v]
-    if pf_z!="All": prev=prev[prev["Thermal Zone"]==pf_z]
-    if pf_s!="All": prev=prev[prev["Severity"]==pf_s]
-    st.markdown(f"<p style='color:#8b949e;font-size:13px'>Showing <b style='color:#e8e8e8'>{len(prev)}</b> of <b style='color:#e8e8e8'>{len(df)}</b> records</p>", unsafe_allow_html=True)
+    if pv != "All": prev = prev[prev["Vendor"]==pv]
+    if pz != "All": prev = prev[prev["Thermal Zone"]==pz]
+    if ps != "All": prev = prev[prev["Severity"]==ps]
 
-    def sty_sev(v):
-        return ({"Critical":"background-color:#3d1f1f;color:#f85149;font-weight:600",
-                 "Major":   "background-color:#3d2f0f;color:#d29922;font-weight:600",
-                 "Minor":   "background-color:#0f2d1f;color:#3fb950;font-weight:600"}).get(v,"")
-
+    st.markdown(f"<p style='color:#8b949e;font-size:13px'>Showing "
+                f"<b style='color:#e8e8e8'>{len(prev)}</b> of "
+                f"<b style='color:#e8e8e8'>{len(df)}</b> records</p>",
+                unsafe_allow_html=True)
     st.dataframe(
-        prev.sort_values("Timestamp",ascending=False).reset_index(drop=True)
+        prev.sort_values("Timestamp", ascending=False).reset_index(drop=True)
             .style.map(sty_sev, subset=["Severity"]),
         use_container_width=True, hide_index=True, height=440
     )
-    csv=prev.to_csv(index=False).encode()
-    st.download_button("Download filtered log as CSV", csv, "failureiq_log.csv","text/csv")
+    csv = prev.to_csv(index=False).encode()
+    st.download_button("Download as CSV", csv, "failureiq_log.csv", "text/csv")
