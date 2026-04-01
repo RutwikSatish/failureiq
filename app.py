@@ -192,7 +192,21 @@ with tab1:
         fm_counts = filt["Failure Mode"].value_counts().reset_index()
         fm_counts.columns = ["Failure Mode","Count"]
         fm_counts["Cumulative %"] = (fm_counts["Count"].cumsum() / fm_counts["Count"].sum() * 100).round(1)
-        fig = go.Figure()
+        fig = go.Figure(layout=go.Layout(
+            template="plotly_dark",
+            paper_bgcolor="#0f1117", plot_bgcolor="#161b22",
+            font=dict(color="#e8e8e8"),
+            margin=dict(t=30,b=60,l=10,r=60),
+            height=380,
+            xaxis=dict(gridcolor="#30363d", linecolor="#30363d",
+                       tickfont=dict(color="#8b949e"), tickangle=30),
+            yaxis=dict(gridcolor="#30363d", linecolor="#30363d",
+                       tickfont=dict(color="#8b949e")),
+            yaxis2=dict(overlaying="y", side="right", range=[0,110],
+                        gridcolor="#30363d", tickfont=dict(color="#8b949e"),
+                        title="Cumulative %", titlefont=dict(color="#8b949e")),
+            legend=dict(orientation="h", y=1.05, font=dict(color="#e8e8e8")),
+        ))
         fig.add_bar(x=fm_counts["Failure Mode"], y=fm_counts["Count"],
                     name="Count", marker_color="#58a6ff")
         fig.add_scatter(x=fm_counts["Failure Mode"], y=fm_counts["Cumulative %"],
@@ -201,21 +215,26 @@ with tab1:
         fig.add_hline(y=80, line_dash="dash", line_color="#d29922",
                       yref="y2", annotation_text="80% threshold",
                       annotation_font_color="#d29922")
-        fig.update_layout(**DARK)
-        fig.update_layout(height=380,
-                          yaxis2=dict(overlaying="y", side="right",
-                                      range=[0,110], gridcolor="#30363d",
-                                      tickfont=dict(color="#8b949e"), title="Cumulative %",
-                                      titlefont=dict(color="#8b949e")),
-                          legend=dict(orientation="h", y=1.05, font=dict(color="#e8e8e8")),
-                          xaxis=dict(tickangle=30))
         st.plotly_chart(fig, use_container_width=True)
 
     with c2:
         vnd_counts = filt["Vendor"].value_counts().reset_index()
         vnd_counts.columns = ["Vendor","Count"]
         vnd_counts["Cumulative %"] = (vnd_counts["Count"].cumsum() / vnd_counts["Count"].sum() * 100).round(1)
-        fig2 = go.Figure()
+        fig2 = go.Figure(layout=go.Layout(
+            template="plotly_dark",
+            paper_bgcolor="#0f1117", plot_bgcolor="#161b22",
+            font=dict(color="#e8e8e8"),
+            margin=dict(t=30,b=40,l=10,r=60),
+            height=380,
+            xaxis=dict(gridcolor="#30363d", linecolor="#30363d",
+                       tickfont=dict(color="#8b949e")),
+            yaxis=dict(gridcolor="#30363d", linecolor="#30363d",
+                       tickfont=dict(color="#8b949e")),
+            yaxis2=dict(overlaying="y", side="right", range=[0,110],
+                        gridcolor="#30363d", tickfont=dict(color="#8b949e")),
+            legend=dict(orientation="h", y=1.05, font=dict(color="#e8e8e8")),
+        ))
         fig2.add_bar(x=vnd_counts["Vendor"], y=vnd_counts["Count"],
                      name="Count", marker_color="#3fb950")
         fig2.add_scatter(x=vnd_counts["Vendor"], y=vnd_counts["Cumulative %"],
@@ -224,12 +243,6 @@ with tab1:
         fig2.add_hline(y=80, line_dash="dash", line_color="#d29922",
                        yref="y2", annotation_text="80% threshold",
                        annotation_font_color="#d29922")
-        fig2.update_layout(**DARK)
-        fig2.update_layout(height=380,
-                           yaxis2=dict(overlaying="y", side="right",
-                                       range=[0,110], gridcolor="#30363d",
-                                       tickfont=dict(color="#8b949e")),
-                           legend=dict(orientation="h", y=1.05, font=dict(color="#e8e8e8")))
         st.plotly_chart(fig2, use_container_width=True)
 
     st.markdown("<h4 style='color:#e8e8e8'>Failure heatmap — vendor vs. failure mode</h4>", unsafe_allow_html=True)
